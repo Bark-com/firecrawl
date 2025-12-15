@@ -329,8 +329,41 @@ class V1ExtractParams(pydantic.BaseModel):
     showSources: Optional[bool] = None
     scrapeOptions: Optional[V1ScrapeOptions] = None
 
+class V1CostTrackingCall(pydantic.BaseModel):
+    """A single LLM call in the cost tracking breakdown."""
+    model_config = {"extra": "allow"}
+    
+    cost: Optional[float] = None
+    model: Optional[str] = None
+    metadata: Optional[Dict[str, Any]] = None
+    tokens: Optional[Dict[str, int]] = None
+    stack: Optional[str] = None  # Only present with verbosity="full"
+
+
+class V1CostTrackingData(pydantic.BaseModel):
+    """Cost tracking data for extract operations.
+    
+    Fields present depend on verbosity level:
+    - "summary": Only totals (total_calls, total_input_tokens, total_output_tokens, total_cost)
+    - "detailed": Totals + calls array (without stack traces)
+    - "full": Everything including stack traces
+    """
+    model_config = {"extra": "allow"}
+    
+    # Summary fields (always present)
+    totalCalls: Optional[int] = None
+    totalInputTokens: Optional[int] = None
+    totalOutputTokens: Optional[int] = None
+    totalCost: Optional[float] = None
+    
+    # Detailed fields (present with "detailed" or "full" verbosity)
+    calls: Optional[List[V1CostTrackingCall]] = None
+
+
 class V1ExtractResponse(pydantic.BaseModel, Generic[T]):
     """Response from extract operations."""
+    model_config = {"extra": "allow"}
+    
     id: Optional[str] = None
     status: Optional[Literal["processing", "completed", "failed"]] = None
     expiresAt: Optional[datetime] = None
@@ -340,6 +373,11 @@ class V1ExtractResponse(pydantic.BaseModel, Generic[T]):
     warning: Optional[str] = None
     sources: Optional[Dict[Any, Any]] = None
     creditsUsed: Optional[int] = None
+    tokensUsed: Optional[int] = None
+    
+    # Cost tracking fields (requires __experimental_showCostTracking=True)
+    llmUsage: Optional[float] = None  # Total LLM cost in dollars (deprecated, use costTracking.totalCost)
+    costTracking: Optional[V1CostTrackingData] = None  # Detailed breakdown
 
 class V1SearchParams(pydantic.BaseModel):
     query: str
@@ -1948,6 +1986,10 @@ class V1FirecrawlApp:
             enable_web_search: Optional[bool] = False,
             show_sources: Optional[bool] = False,
             agent: Optional[Dict[str, Any]] = None,
+            limit: Optional[int] = None,
+            show_llm_usage: Optional[bool] = None,
+            show_cost_tracking: Optional[bool] = None,
+            cost_tracking_verbosity: Optional[Literal["summary", "detailed", "full"]] = None,
             **kwargs) -> V1ExtractResponse[Any]:
         """
         Extract structured information from URLs.
@@ -1961,6 +2003,13 @@ class V1FirecrawlApp:
             enable_web_search (Optional[bool]): Enable web search
             show_sources (Optional[bool]): Include source URLs
             agent (Optional[Dict[str, Any]]): Agent configuration
+            limit (Optional[int]): Maximum number of pages to scrape
+            show_llm_usage (Optional[bool]): [DEPRECATED] Use show_cost_tracking instead
+            show_cost_tracking (Optional[bool]): Include cost tracking data (self-hosted)
+            cost_tracking_verbosity (Optional[Literal]): Level of detail:
+                - "summary": Only totals (total_calls, total_input_tokens, total_output_tokens, total_cost)
+                - "detailed": Totals + per-call breakdown (default)
+                - "full": Everything including stack traces
             **kwargs: Additional parameters to pass to the API
 
         Returns:
@@ -1968,6 +2017,7 @@ class V1FirecrawlApp:
             * success (bool): Whether request succeeded
             * data (Optional[Any]): Extracted data matching schema
             * error (Optional[str]): Error message if any
+            * costTracking (Optional[V1CostTrackingData]): Cost breakdown (if show_cost_tracking=True)
 
         Raises:
             ValueError: If prompt/schema missing or extraction fails
@@ -2003,6 +2053,17 @@ class V1FirecrawlApp:
             
         if agent:
             request_data['agent'] = agent
+            
+        if limit is not None:
+            request_data['limit'] = limit
+            
+        # Cost tracking flags (useful for self-hosted deployments)
+        if show_llm_usage is not None:
+            request_data['__experimental_llmUsage'] = show_llm_usage
+        if show_cost_tracking is not None:
+            request_data['__experimental_showCostTracking'] = show_cost_tracking
+        if cost_tracking_verbosity is not None:
+            request_data['__experimental_costTrackingVerbosity'] = cost_tracking_verbosity
 
         # Add any additional kwargs
         request_data.update(kwargs)
@@ -2088,7 +2149,11 @@ class V1FirecrawlApp:
             allow_external_links: Optional[bool] = False,
             enable_web_search: Optional[bool] = False,
             show_sources: Optional[bool] = False,
-            agent: Optional[Dict[str, Any]] = None) -> V1ExtractResponse[Any]:
+            agent: Optional[Dict[str, Any]] = None,
+            limit: Optional[int] = None,
+            show_llm_usage: Optional[bool] = None,
+            show_cost_tracking: Optional[bool] = None,
+            cost_tracking_verbosity: Optional[Literal["summary", "detailed", "full"]] = None) -> V1ExtractResponse[Any]:
         """
         Initiate an asynchronous extract job.
 
@@ -2101,12 +2166,18 @@ class V1FirecrawlApp:
             enable_web_search (Optional[bool]): Enable web search
             show_sources (Optional[bool]): Include source URLs
             agent (Optional[Dict[str, Any]]): Agent configuration
-            idempotency_key (Optional[str]): Unique key to prevent duplicate requests
+            limit (Optional[int]): Maximum number of pages to scrape
+            show_llm_usage (Optional[bool]): [DEPRECATED] Use show_cost_tracking instead
+            show_cost_tracking (Optional[bool]): Include cost tracking data (self-hosted)
+            cost_tracking_verbosity (Optional[Literal]): Level of detail:
+                - "summary": Only totals
+                - "detailed": Totals + per-call breakdown (default)
+                - "full": Everything including stack traces
 
         Returns:
-            ExtractResponse[Any] with:
+            V1ExtractResponse[Any] with:
             * success (bool): Whether request succeeded
-            * data (Optional[Any]): Extracted data matching schema
+            * id (str): Job ID for polling status
             * error (Optional[str]): Error message if any
 
         Raises:
@@ -2133,6 +2204,16 @@ class V1FirecrawlApp:
             request_data['systemPrompt'] = system_prompt
         if agent:
             request_data['agent'] = agent
+        if limit is not None:
+            request_data['limit'] = limit
+            
+        # Cost tracking flags (useful for self-hosted deployments)
+        if show_llm_usage is not None:
+            request_data['__experimental_llmUsage'] = show_llm_usage
+        if show_cost_tracking is not None:
+            request_data['__experimental_showCostTracking'] = show_cost_tracking
+        if cost_tracking_verbosity is not None:
+            request_data['__experimental_costTrackingVerbosity'] = cost_tracking_verbosity
 
         try:
             response = self._post_request(f'{self.api_url}/v1/extract', request_data, headers)
@@ -4353,7 +4434,11 @@ class AsyncV1FirecrawlApp(V1FirecrawlApp):
             allow_external_links: Optional[bool] = False,
             enable_web_search: Optional[bool] = False,
             show_sources: Optional[bool] = False,
-            agent: Optional[Dict[str, Any]] = None) -> V1ExtractResponse[Any]:
+            agent: Optional[Dict[str, Any]] = None,
+            limit: Optional[int] = None,
+            show_llm_usage: Optional[bool] = None,
+            show_cost_tracking: Optional[bool] = None,
+            cost_tracking_verbosity: Optional[Literal["summary", "detailed", "full"]] = None) -> V1ExtractResponse[Any]:
             
         """
         Asynchronously extract structured information from URLs.
@@ -4367,12 +4452,20 @@ class AsyncV1FirecrawlApp(V1FirecrawlApp):
             enable_web_search (Optional[bool]): Enable web search
             show_sources (Optional[bool]): Include source URLs
             agent (Optional[Dict[str, Any]]): Agent configuration
+            limit (Optional[int]): Maximum number of pages to scrape
+            show_llm_usage (Optional[bool]): [DEPRECATED] Use show_cost_tracking instead
+            show_cost_tracking (Optional[bool]): Include cost tracking data (self-hosted)
+            cost_tracking_verbosity (Optional[Literal]): Level of detail:
+                - "summary": Only totals
+                - "detailed": Totals + per-call breakdown (default)
+                - "full": Everything including stack traces
 
         Returns:
           V1ExtractResponse with:
           * Structured data matching schema
           * Source information if requested
           * Success/error status
+          * costTracking (if show_cost_tracking=True)
 
         Raises:
           ValueError: If prompt/schema missing or extraction fails
@@ -4405,6 +4498,16 @@ class AsyncV1FirecrawlApp(V1FirecrawlApp):
             
         if agent:
             request_data['agent'] = agent
+        if limit is not None:
+            request_data['limit'] = limit
+            
+        # Cost tracking flags (useful for self-hosted deployments)
+        if show_llm_usage is not None:
+            request_data['__experimental_llmUsage'] = show_llm_usage
+        if show_cost_tracking is not None:
+            request_data['__experimental_showCostTracking'] = show_cost_tracking
+        if cost_tracking_verbosity is not None:
+            request_data['__experimental_costTrackingVerbosity'] = cost_tracking_verbosity
 
         response = await self._async_post_request(
             f'{self.api_url}/v1/extract',
