@@ -2,7 +2,7 @@ import { MapDocument, URLTrace } from "../../controllers/v1/types";
 import { logger } from "../logger";
 import { generateCompletions } from "../../scraper/scrapeURL/transformers/llmExtract";
 import { buildRerankerUserPrompt } from "./build-prompts";
-import { getModel } from "../generic-ai";
+import { getModelForPurpose } from "../generic-ai";
 import { CostTracking } from "../cost-tracking";
 
 const THRESHOLD_FOR_SINGLEPAGE = 0.6;
@@ -141,8 +141,8 @@ export async function rerankLinksWithLLM(
           let completion: any;
           try {
             const completionPromise = generateCompletions({
-              model: getModel("gemini-2.5-pro", "vertex"),
-              retryModel: getModel("gemini-2.5-pro", "google"),
+              model: getModelForPurpose("reranker"),
+              retryModel: getModelForPurpose("reranker_fallback"),
               logger: logger.child({
                 method: "rerankLinksWithLLM",
                 chunk: chunkIndex + 1,

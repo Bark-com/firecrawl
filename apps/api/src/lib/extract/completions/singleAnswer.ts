@@ -5,7 +5,7 @@ import {
 } from "../../../scraper/scrapeURL/transformers/llmExtract";
 import { buildDocument } from "../build-document";
 import { Document, TokenUsage } from "../../../controllers/v1/types";
-import { getModel } from "../../../lib/generic-ai";
+import { getModelForPurpose } from "../../../lib/generic-ai";
 import { extractData } from "../../../scraper/scrapeURL/lib/extractSmartScrape";
 import { CostTracking } from "../../cost-tracking";
 
@@ -57,8 +57,8 @@ export async function singleAnswerCompletion({
     },
     markdown: `${singleAnswerDocs.map((x, i) => `[START_PAGE (ID: ${i})]` + buildDocument(x)).join("\n")} [END_PAGE]\n`,
     isExtractEndpoint: true,
-    model: getModel("gpt-4o-mini", "openai"),
-    retryModel: getModel("gpt-4.1", "openai"),
+    model: getModelForPurpose("extract"),
+    retryModel: getModelForPurpose("extract_fallback"),
     costTrackingOptions: {
       costTracking,
       metadata: {
@@ -74,7 +74,7 @@ export async function singleAnswerCompletion({
     },
   };
 
-  const { extractedDataArray, warning } = await extractData({
+  const { extractedDataArray, warning, totalUsage } = await extractData({
     extractOptions: generationOptions,
     urls: singleAnswerDocs.map(
       doc => doc.metadata.url || doc.metadata.sourceURL || "",
@@ -92,11 +92,11 @@ export async function singleAnswerCompletion({
 
   const completion = {
     extract: extractedDataArray,
-    tokenUsage: {
+    tokenUsage: totalUsage ?? {
       promptTokens: 0,
       completionTokens: 0,
       totalTokens: 0,
-      model: "gemini-2.5-pro",
+      model: "unknown",
     },
     sources: singleAnswerDocs.map(
       doc => doc.metadata.url || doc.metadata.sourceURL || "",

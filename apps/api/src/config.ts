@@ -143,11 +143,58 @@ const configSchema = z.object({
   FORCED_ENGINE_DOMAINS: z.string().optional(),
   DEBUG_BRANDING: z.stringbool().optional(),
 
-  // AI/ML
+  // AI/ML - Global Settings
   MODEL_NAME: z.string().optional(),
   MODEL_EMBEDDING_NAME: z.string().optional(),
   OLLAMA_BASE_URL: z.string().optional(),
+  
+  // Vertex AI Configuration
   VERTEX_CREDENTIALS: z.string().optional(),
+  VERTEX_PROJECT: z.string().optional(),
+  VERTEX_LOCATION: z.string().optional(),
+  VERTEX_BASE_URL: z.string().optional(),
+
+  // Per-Purpose Model Configuration
+  // Each purpose can specify a model and provider (e.g., EXTRACT_MODEL=gemini-2.0-flash, EXTRACT_MODEL_PROVIDER=google)
+  // Providers: openai, google, vertex, anthropic, groq, ollama, openrouter, fireworks, deepinfra
+  
+  // Extraction models
+  EXTRACT_MODEL: z.string().optional(),
+  EXTRACT_MODEL_PROVIDER: z.string().optional(),
+  EXTRACT_FALLBACK_MODEL: z.string().optional(),
+  EXTRACT_FALLBACK_MODEL_PROVIDER: z.string().optional(),
+  
+  // Schema processing models
+  SCHEMA_ANALYSIS_MODEL: z.string().optional(),
+  SCHEMA_ANALYSIS_MODEL_PROVIDER: z.string().optional(),
+  SCHEMA_GENERATION_MODEL: z.string().optional(),
+  SCHEMA_GENERATION_MODEL_PROVIDER: z.string().optional(),
+  
+  // Reranker models (URL relevance scoring)
+  RERANKER_MODEL: z.string().optional(),
+  RERANKER_MODEL_PROVIDER: z.string().optional(),
+  RERANKER_FALLBACK_MODEL: z.string().optional(),
+  RERANKER_FALLBACK_MODEL_PROVIDER: z.string().optional(),
+  
+  // URL processor model
+  URL_PROCESSOR_MODEL: z.string().optional(),
+  URL_PROCESSOR_MODEL_PROVIDER: z.string().optional(),
+  
+  // Other feature models
+  SUMMARY_MODEL: z.string().optional(),
+  SUMMARY_MODEL_PROVIDER: z.string().optional(),
+  BRANDING_MODEL: z.string().optional(),
+  BRANDING_MODEL_PROVIDER: z.string().optional(),
+  ENGPICKER_MODEL: z.string().optional(),
+  ENGPICKER_MODEL_PROVIDER: z.string().optional(),
+  LLMSTXT_MODEL: z.string().optional(),
+  LLMSTXT_MODEL_PROVIDER: z.string().optional(),
+  
+  // Deep Research models
+  DEEP_RESEARCH_MODEL: z.string().optional(),
+  DEEP_RESEARCH_MODEL_PROVIDER: z.string().optional(),
+  DEEP_RESEARCH_PLANNING_MODEL: z.string().optional(),
+  DEEP_RESEARCH_PLANNING_MODEL_PROVIDER: z.string().optional(),
 
   // Rate Limiting
   RATE_LIMIT_TEST_API_KEY_SCRAPE: z.coerce.number().optional(),

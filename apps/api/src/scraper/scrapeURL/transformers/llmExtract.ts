@@ -17,7 +17,7 @@ import {
   NoObjectGeneratedError,
   jsonSchema,
 } from "ai";
-import { getModel } from "../../../lib/generic-ai";
+import { getModel, getModelForPurpose } from "../../../lib/generic-ai";
 import { z } from "zod";
 import fs from "fs/promises";
 import Ajv from "ajv";
@@ -225,40 +225,115 @@ export function calculateCost(
   inputTokens: number,
   outputTokens: number,
 ) {
-  const modelCosts = {
+  // Costs are per 1M tokens (will be divided by 1_000_000 at the end)
+  // Pricing as of December 2024 from Google AI and OpenAI
+  const modelCosts: Record<string, { input_cost: number; output_cost: number }> = {
+    // =========================================================================
+    // OpenAI Models
+    // =========================================================================
     "openai/o3-mini": { input_cost: 1.1, output_cost: 4.4 },
+    "o3-mini": { input_cost: 1.1, output_cost: 4.4 },
     "gpt-4o-mini": { input_cost: 0.15, output_cost: 0.6 },
     "openai/gpt-4o-mini": { input_cost: 0.15, output_cost: 0.6 },
     "openai/gpt-4o": { input_cost: 2.5, output_cost: 10 },
+    "gpt-4o": { input_cost: 2.5, output_cost: 10 },
+    "gpt-4.1": { input_cost: 2.0, output_cost: 8.0 },
+    "openai/gpt-4.1": { input_cost: 2.0, output_cost: 8.0 },
     "gpt-5": { input_cost: 1.25, output_cost: 10 },
     "openai/gpt-5": { input_cost: 1.25, output_cost: 10 },
     "gpt-5-mini": { input_cost: 0.25, output_cost: 2 },
     "openai/gpt-5-mini": { input_cost: 0.25, output_cost: 2 },
     "gpt-5-nano": { input_cost: 0.05, output_cost: 0.4 },
     "openai/gpt-5-nano": { input_cost: 0.05, output_cost: 0.4 },
-    "google/gemini-2.0-flash-001": { input_cost: 0.15, output_cost: 0.6 },
-    "gemini-2.0-flash": { input_cost: 0.15, output_cost: 0.6 },
+    
+    // =========================================================================
+    // Gemini 2.0 Models (Google AI Studio pricing)
+    // =========================================================================
+    // Gemini 2.0 Flash: $0.10/1M input, $0.40/1M output
+    "gemini-2.0-flash": { input_cost: 0.10, output_cost: 0.40 },
+    "gemini-2.0-flash-001": { input_cost: 0.10, output_cost: 0.40 },
+    "gemini-2.0-flash-exp": { input_cost: 0.10, output_cost: 0.40 },
+    
+    // Gemini 2.0 Flash Lite: $0.075/1M input, $0.30/1M output
+    "gemini-2.0-flash-lite": { input_cost: 0.075, output_cost: 0.30 },
+    "gemini-2.0-flash-lite-001": { input_cost: 0.075, output_cost: 0.30 },
+    "gemini-2.0-flash-lite-preview": { input_cost: 0.075, output_cost: 0.30 },
+    "gemini-2.0-flash-lite-preview-02-05": { input_cost: 0.075, output_cost: 0.30 },
+    
+    // =========================================================================
+    // Gemini 2.5 Models (context-based pricing handled below)
+    // =========================================================================
+    // Gemini 2.5 Flash: $0.15/1M input, $0.60/1M output (≤200K)
+    //                   $0.30/1M input, $1.20/1M output (>200K)
+    "gemini-2.5-flash": { input_cost: 0.15, output_cost: 0.60 },
+    "gemini-flash-latest": { input_cost: 0.15, output_cost: 0.60 },
+    
+    // Gemini 2.5 Flash Lite: $0.075/1M input, $0.30/1M output
+    "gemini-2.5-flash-lite": { input_cost: 0.075, output_cost: 0.30 },
+    "gemini-flash-lite-latest": { input_cost: 0.075, output_cost: 0.30 },
+    
+    // Gemini 2.5 Pro: handled specially below (context-based pricing)
+    // $1.25/1M input, $10.00/1M output (≤200K)
+    // $2.50/1M input, $15.00/1M output (>200K)
+    "gemini-2.5-pro": { input_cost: 1.25, output_cost: 10.0 },
+    "gemini-pro-latest": { input_cost: 1.25, output_cost: 10.0 },
+    
+    // =========================================================================
+    // Gemini 1.5 Models (legacy, but included for completeness)
+    // =========================================================================
+    "gemini-1.5-pro": { input_cost: 1.25, output_cost: 5.0 },
+    "gemini-1.5-pro-002": { input_cost: 1.25, output_cost: 5.0 },
+    "gemini-1.5-pro-001": { input_cost: 1.25, output_cost: 5.0 },
+    "gemini-1.5-flash": { input_cost: 0.075, output_cost: 0.30 },
+    "gemini-1.5-flash-002": { input_cost: 0.075, output_cost: 0.30 },
+    "gemini-1.5-flash-001": { input_cost: 0.075, output_cost: 0.30 },
+    
+    // =========================================================================
+    // DeepSeek
+    // =========================================================================
     "deepseek/deepseek-r1": { input_cost: 0.55, output_cost: 2.19 },
-    "google/gemini-2.0-flash-thinking-exp:free": {
-      input_cost: 0.55,
-      output_cost: 2.19,
-    },
-    "google/gemini-2.5-flash-lite": { input_cost: 0.1, output_cost: 0.4 },
+    
+    // =========================================================================
+    // Anthropic
+    // =========================================================================
+    "claude-3-5-sonnet-20241022": { input_cost: 3.0, output_cost: 15.0 },
+    "claude-3-5-haiku-20241022": { input_cost: 0.80, output_cost: 4.0 },
+    "claude-3-opus-20240229": { input_cost: 15.0, output_cost: 75.0 },
   };
-  let modelCost = modelCosts[model] || { input_cost: 0, output_cost: 0 };
-  //gemini-2.5-pro-exp-03-25 pricing
-  if (model.includes("gemini-2.5-pro")) {
-    let inputCost = 0;
-    let outputCost = 0;
+  
+  let modelCost = modelCosts[model];
+  
+  // Handle gemini-2.5-pro with context-based pricing
+  if (model.includes("gemini-2.5-pro") || model === "gemini-pro-latest") {
     if (inputTokens <= 200000) {
-      inputCost = 1.25;
-      outputCost = 10.0;
+      modelCost = { input_cost: 1.25, output_cost: 10.0 };
     } else {
-      inputCost = 2.5;
-      outputCost = 15.0;
+      modelCost = { input_cost: 2.5, output_cost: 15.0 };
     }
-    modelCost = { input_cost: inputCost, output_cost: outputCost };
   }
+  
+  // Handle gemini-2.5-flash with context-based pricing (>200K tokens)
+  if ((model.includes("gemini-2.5-flash") || model === "gemini-flash-latest") && 
+      !model.includes("lite") && inputTokens > 200000) {
+    modelCost = { input_cost: 0.30, output_cost: 1.20 };
+  }
+  
+  // Handle gemini-1.5-pro with context-based pricing (>128K tokens)
+  if (model.includes("gemini-1.5-pro") && inputTokens > 128000) {
+    modelCost = { input_cost: 2.5, output_cost: 10.0 };
+  }
+  
+  // Handle gemini-1.5-flash with context-based pricing (>128K tokens)
+  if (model.includes("gemini-1.5-flash") && inputTokens > 128000) {
+    modelCost = { input_cost: 0.15, output_cost: 0.60 };
+  }
+  
+  // Fallback: log warning if model not found, but still return 0
+  if (!modelCost) {
+    logger.warn(`Cost tracking: Unknown model "${model}", cost will be recorded as $0`);
+    modelCost = { input_cost: 0, output_cost: 0 };
+  }
+  
   const totalCost =
     (inputTokens * modelCost.input_cost +
       outputTokens * modelCost.output_cost) /
@@ -300,10 +375,10 @@ export async function generateCompletions({
   markdown,
   previousWarning,
   isExtractEndpoint,
-  model = getModel("gpt-4o-mini", "openai"),
+  model = getModelForPurpose("extract"),
   mode = "object",
   providerOptions,
-  retryModel = getModel("gpt-4.1", "openai"),
+  retryModel = getModelForPurpose("extract_fallback"),
   costTrackingOptions,
   metadata,
 }: GenerateCompletionsOptions): Promise<{
@@ -340,16 +415,6 @@ export async function generateCompletions({
           providerOptions: {
             anthropic: {
               thinking: { type: "enabled", budgetTokens: 12000 },
-            },
-            google: {
-              labels: {
-                teamId: metadata.teamId,
-                functionId: metadata.functionId ?? "unspecified",
-                extractId: metadata.extractId ?? "unspecified",
-                scrapeId: metadata.scrapeId ?? "unspecified",
-                deepResearchId: metadata.deepResearchId ?? "unspecified",
-                llmsTxtId: metadata.llmsTxtId ?? "unspecified",
-              },
             },
             openai: {
               strictJsonSchema: true,
@@ -420,6 +485,7 @@ export async function generateCompletions({
             totalTokens:
               result.usage?.inputTokens ??
               0 + (result.usage?.outputTokens ?? 0),
+            model: modelId,
           },
           model: modelId,
         };
@@ -446,16 +512,6 @@ export async function generateCompletions({
               providerOptions: {
                 anthropic: {
                   thinking: { type: "enabled", budgetTokens: 12000 },
-                },
-                google: {
-                  labels: {
-                    teamId: metadata.teamId,
-                    functionId: metadata.functionId ?? "unspecified",
-                    extractId: metadata.extractId ?? "unspecified",
-                    scrapeId: metadata.scrapeId ?? "unspecified",
-                    deepResearchId: metadata.deepResearchId ?? "unspecified",
-                    llmsTxtId: metadata.llmsTxtId ?? "unspecified",
-                  },
                 },
                 openai: {
                   strictJsonSchema: true,
@@ -527,6 +583,7 @@ export async function generateCompletions({
                 totalTokens:
                   result.usage?.inputTokens ??
                   0 + (result.usage?.outputTokens ?? 0),
+                model: modelId,
               },
               model: modelId,
             };
@@ -618,16 +675,6 @@ export async function generateCompletions({
               anthropic: {
                 thinking: { type: "enabled", budgetTokens: 12000 },
               },
-              google: {
-                labels: {
-                  teamId: metadata.teamId,
-                  functionId: metadata.functionId ?? "unspecified",
-                  extractId: metadata.extractId ?? "unspecified",
-                  scrapeId: metadata.scrapeId ?? "unspecified",
-                  deepResearchId: metadata.deepResearchId ?? "unspecified",
-                  llmsTxtId: metadata.llmsTxtId ?? "unspecified",
-                },
-              },
               openai: {
                 strictJsonSchema: true,
               },
@@ -700,18 +747,6 @@ export async function generateCompletions({
       prompt: prompt,
       providerOptions: {
         ...(providerOptions || {}),
-        google: {
-          ...((providerOptions as any)?.vertex || {}),
-          labels: {
-            ...((providerOptions as any)?.vertex?.labels || {}),
-            teamId: metadata.teamId,
-            functionId: metadata.functionId ?? "unspecified",
-            extractId: metadata.extractId ?? "unspecified",
-            scrapeId: metadata.scrapeId ?? "unspecified",
-            deepResearchId: metadata.deepResearchId ?? "unspecified",
-            llmsTxtId: metadata.llmsTxtId ?? "unspecified",
-          },
-        },
         openai: {
           strictJsonSchema: true,
         },
@@ -920,6 +955,7 @@ export async function generateCompletions({
         promptTokens,
         completionTokens,
         totalTokens: promptTokens + completionTokens,
+        model: modelId,
       },
       model: modelId,
     };
@@ -975,8 +1011,8 @@ export async function performLLMExtract(
       options: jsonFormat,
       markdown: document.markdown,
       previousWarning: document.warning,
-      model: getModel(modelSelection.modelName, "openai"),
-      retryModel: getModel("gpt-4.1", "openai"),
+      model: getModelForPurpose("extract"),
+      retryModel: getModelForPurpose("extract_fallback"),
       costTrackingOptions: {
         costTracking: meta.costTracking,
         metadata: {
@@ -1167,16 +1203,8 @@ export async function performSummary(
       },
       markdown: trimOutput.text,
       previousWarning: document.warning,
-      model: (() => {
-        const inlineSchema = {
-          type: "object",
-          properties: { summary: { type: "string" } },
-          required: ["summary"],
-        };
-        const selection = selectModelForSchema(inlineSchema);
-        return getModel(selection.modelName, "openai");
-      })(),
-      retryModel: getModel("gpt-4.1", "openai"),
+      model: getModelForPurpose("summary"),
+      retryModel: getModelForPurpose("extract_fallback"),
       costTrackingOptions: {
         costTracking: meta.costTracking,
         metadata: {
@@ -1274,8 +1302,8 @@ export async function generateSchemaFromPrompt(
     scrapeId?: string;
   },
 ): Promise<{ extract: any }> {
-  const model = getModel("gpt-4o-mini", "openai");
-  const retryModel = getModel("gpt-4.1", "openai");
+  const model = getModelForPurpose("schema_generation");
+  const retryModel = getModelForPurpose("extract_fallback");
   const temperatures = [0, 0.1, 0.3]; // Different temperatures to try
   let lastError: Error | null = null;
 
@@ -1352,8 +1380,8 @@ export async function generateCrawlerOptionsFromPrompt(
   costTracking: CostTracking,
   metadata: { teamId: string; crawlId?: string },
 ): Promise<{ extract: any }> {
-  const model = getModel("gpt-4o-mini", "openai");
-  const retryModel = getModel("gpt-4.1", "openai");
+  const model = getModelForPurpose("extract");
+  const retryModel = getModelForPurpose("extract_fallback");
   const temperatures = [0, 0.1, 0.3];
   let lastError: Error | null = null;
 

@@ -3,12 +3,12 @@ import { logger } from "../logger";
 import { BrandingEnhancement, brandingEnhancementSchema } from "./schema";
 import { buildBrandingPrompt } from "./prompt";
 import { BrandingLLMInput } from "./types";
-import { getModel } from "../generic-ai";
+import { getModelForPurpose } from "../generic-ai";
 
 export async function enhanceBrandingWithLLM(
   input: BrandingLLMInput,
 ): Promise<BrandingEnhancement> {
-  const model = getModel("gpt-4o-mini");
+  const model = getModelForPurpose("branding");
 
   const prompt = buildBrandingPrompt(input);
 

@@ -40,6 +40,7 @@ import {
 } from "./usage/llm-cost-f0";
 import { SourceTracker_F0 } from "./helpers/source-tracker-f0";
 import { getACUCTeam } from "../../../controllers/auth";
+import { CostTracking } from "../../cost-tracking";
 
 interface ExtractServiceOptions {
   request: ExtractRequest;
@@ -162,6 +163,9 @@ export async function performExtraction_F0(
 
   // Token tracking
   let tokenUsage: TokenUsage[] = [];
+  
+  // Cost tracking for URL processing, reranking, etc.
+  const costTracking = new CostTracking();
 
   await updateExtract(extractId, {
     status: "processing",
@@ -210,6 +214,7 @@ export async function performExtraction_F0(
       },
       logger.child({ module: "extract", method: "processUrl", url }),
       acuc?.flags ?? null,
+      costTracking,
     ),
   );
 
@@ -885,6 +890,27 @@ export async function performExtraction_F0(
     creditsBilled: creditsToBill,
   });
 
+  // Merge cost tracking from URL processing/reranking with token usage
+  const costTrackingData = costTracking.toJSON();
+  const allCalls = [
+    // Token usage from extraction
+    ...tokenUsage.map(usage => ({
+      type: "other" as const,
+      cost: estimateCost_F0(usage),
+      model: usage.model ?? "",
+      metadata: { source: "extraction" },
+      stack: "",
+      tokens: {
+        input: usage.promptTokens,
+        output: usage.completionTokens,
+      },
+    })),
+    // Calls from URL processing, reranking, etc.
+    ...costTrackingData.calls,
+  ];
+  
+  const totalCost = llmUsage + costTrackingData.totalCost;
+
   // Log job with token usage and sources
   await logExtract({
     id: extractId,
@@ -897,22 +923,12 @@ export async function performExtraction_F0(
     is_successful: true,
     result: finalResult ?? {},
     cost_tracking: {
-      calls: tokenUsage.map(usage => ({
-        type: "other",
-        cost: estimateCost_F0(usage),
-        model: usage.model ?? "",
-        metadata: {},
-        stack: "",
-        tokens: {
-          input: usage.promptTokens,
-          output: usage.completionTokens,
-        },
-      })),
-      smartScrapeCallCount: 0,
-      smartScrapeCost: 0,
-      otherCallCount: tokenUsage.length,
-      otherCost: llmUsage,
-      totalCost: llmUsage,
+      calls: allCalls,
+      smartScrapeCallCount: costTrackingData.smartScrapeCallCount,
+      smartScrapeCost: costTrackingData.smartScrapeCost,
+      otherCallCount: allCalls.length,
+      otherCost: totalCost,
+      totalCost: totalCost,
     },
   })
     .then(() => {
@@ -931,6 +947,19 @@ export async function performExtraction_F0(
         sources,
         tokensBilled: tokensToBill,
         creditsBilled: creditsToBill,
+        costTracking: {
+          calls: allCalls,
+          smartScrapeCallCount: costTrackingData.smartScrapeCallCount,
+          smartScrapeCost: costTrackingData.smartScrapeCost,
+          otherCallCount: allCalls.length,
+          otherCost: totalCost,
+          totalCost: totalCost,
+        } as any,
+      }).catch(error => {
+        logger.error("Failed to update extract status to completed", {
+          extractId,
+          error,
+        });
       });
     })
     .catch(error => {

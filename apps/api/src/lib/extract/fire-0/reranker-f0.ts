@@ -98,10 +98,10 @@ export async function rerankLinksWithLLM_F0(
             markdown: linksContent,
             isExtractEndpoint: true,
             costTrackingOptions: {
-              costTracking: new CostTracking(),
+              costTracking: costTracking,  // Use the passed-in cost tracking
               metadata: {
                 module: "extract",
-                method: "rerankLinksWithLLM",
+                method: "rerankLinksWithLLM_F0",
               },
             },
             metadata: {

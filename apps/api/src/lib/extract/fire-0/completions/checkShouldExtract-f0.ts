@@ -6,7 +6,7 @@ import {
   buildShouldExtractSystemPrompt_F0,
   buildShouldExtractUserPrompt_F0,
 } from "../build-prompts-f0";
-import { getModel } from "../../../../lib/generic-ai";
+import { getModelForPurpose } from "../../../../lib/generic-ai";
 
 export async function checkShouldExtract_F0(
   prompt: string,
@@ -37,7 +37,7 @@ export async function checkShouldExtract_F0(
     },
     markdown: buildDocument(doc),
     isExtractEndpoint: true,
-    model: getModel("gpt-4o-mini"),
+    model: getModelForPurpose("extract"),
     metadata: {
       ...metadata,
       functionId: metadata.functionId

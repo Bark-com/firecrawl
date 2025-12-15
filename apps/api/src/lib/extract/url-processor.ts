@@ -7,7 +7,7 @@ import { rerankLinksWithLLM } from "./reranker";
 import { extractConfig } from "./config";
 import type { Logger } from "winston";
 import { generateText } from "ai";
-import { getModel } from "../generic-ai";
+import { getModelForPurpose } from "../generic-ai";
 import { calculateCost } from "../../scraper/scrapeURL/transformers/llmExtract";
 import type { CostTracking } from "../cost-tracking";
 
@@ -18,18 +18,11 @@ export async function generateBasicCompletion(
 ): Promise<{ text: string } | null> {
   try {
     const result = await generateText({
-      model: getModel("gpt-4.1", "openai"),
+      model: getModelForPurpose("url_processor"),
       prompt: prompt,
       providerOptions: {
         anthropic: {
           thinking: { type: "enabled", budgetTokens: 12000 },
-        },
-        google: {
-          labels: {
-            functionId: "generateBasicCompletion",
-            teamId: metadata.teamId,
-            extractId: metadata.extractId ?? "unspecified",
-          },
         },
       },
       experimental_telemetry: {
@@ -69,17 +62,11 @@ export async function generateBasicCompletion(
     if (error?.type == "rate_limit_error") {
       try {
         const result = await generateText({
-          model: getModel("gpt-4o-mini", "openai"),
+          model: getModelForPurpose("extract"),
           prompt: prompt,
           providerOptions: {
             anthropic: {
               thinking: { type: "enabled", budgetTokens: 12000 },
-            },
-            google: {
-              labels: {
-                teamId: metadata.teamId,
-                extractId: metadata.extractId ?? "unspecified",
-              },
             },
           },
           experimental_telemetry: {

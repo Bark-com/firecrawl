@@ -11,7 +11,7 @@ import { logger } from "../../../lib/logger";
 import { modelPrices } from "../../../lib/extract/usage/model-prices";
 import { generateObject, generateText, LanguageModel } from "ai";
 import { jsonSchema } from "ai";
-import { getModel } from "../../../lib/generic-ai";
+import { getModel, getModelForPurpose } from "../../../lib/generic-ai";
 import { z } from "zod";
 
 // Get max tokens from model prices
@@ -164,7 +164,7 @@ export async function generateCompletions_F0({
   markdown,
   previousWarning,
   isExtractEndpoint,
-  model = getModel("gpt-4o-mini"),
+  model = getModelForPurpose("extract"),
   mode = "object",
   metadata,
 }: {
@@ -224,16 +224,7 @@ export async function generateCompletions_F0({
         prompt: options.prompt + (markdown ? `\n\nData:${markdown}` : ""),
         temperature: options.temperature ?? 0,
         system: options.systemPrompt,
-        providerOptions: {
-          google: {
-            labels: {
-              functionId: metadata.functionId ?? "unspecified",
-              extractId: metadata.extractId ?? "unspecified",
-              scrapeId: metadata.scrapeId ?? "unspecified",
-              teamId: metadata.teamId,
-            },
-          },
-        },
+        providerOptions: {},
         experimental_telemetry: {
           isEnabled: true,
           functionId: metadata.functionId,
@@ -257,14 +248,19 @@ export async function generateCompletions_F0({
 
       extract = result.text;
 
+      // Use actual token counts from API response when available
+      const actualPromptTokens = result.usage?.inputTokens ?? numTokens;
+      const actualCompletionTokens = result.usage?.outputTokens ?? 0;
+
       return {
         extract,
         warning,
-        numTokens,
+        numTokens: actualPromptTokens,
         totalUsage: {
-          promptTokens: numTokens,
-          completionTokens: result.usage?.outputTokens ?? 0,
-          totalTokens: numTokens + (result.usage?.outputTokens ?? 0),
+          promptTokens: actualPromptTokens,
+          completionTokens: actualCompletionTokens,
+          totalTokens: actualPromptTokens + actualCompletionTokens,
+          model: modelId,
         },
         model: modelId,
       };
@@ -329,16 +325,7 @@ export async function generateCompletions_F0({
           prompt: `Fix this JSON that had the following error: ${error}\n\nOriginal text:\n${text}\n\nReturn only the fixed JSON, no explanation.`,
           system:
             "You are a JSON repair expert. Your only job is to fix malformed JSON and return valid JSON that matches the original structure and intent as closely as possible. Do not include any explanation or commentary - only return the fixed JSON. Do not return it in a Markdown code block, just plain JSON.",
-          providerOptions: {
-            google: {
-              labels: {
-                functionId: metadata.functionId ?? "unspecified",
-                extractId: metadata.extractId ?? "unspecified",
-                scrapeId: metadata.scrapeId ?? "unspecified",
-                teamId: metadata.teamId,
-              },
-            },
-          },
+          providerOptions: {},
           experimental_telemetry: {
             isEnabled: true,
             functionId: metadata.functionId,
@@ -378,16 +365,7 @@ export async function generateCompletions_F0({
           console.error(error);
         },
       }),
-      providerOptions: {
-        google: {
-          labels: {
-            functionId: metadata.functionId ?? "unspecified",
-            extractId: metadata.extractId ?? "unspecified",
-            scrapeId: metadata.scrapeId ?? "unspecified",
-            teamId: metadata.teamId,
-          },
-        },
-      },
+      providerOptions: {},
       experimental_telemetry: {
         isEnabled: true,
         functionId: metadata.functionId,
@@ -422,18 +400,19 @@ export async function generateCompletions_F0({
       extract = extract?.items;
     }
 
-    // Since generateObject doesn't provide token usage, we'll estimate it
-    const promptTokens = numTokens;
+    // Use actual token counts from API response when available
+    const promptTokens = result?.usage?.inputTokens ?? numTokens;
     const completionTokens = result?.usage?.outputTokens ?? 0;
 
     return {
       extract,
       warning,
-      numTokens,
+      numTokens: promptTokens,
       totalUsage: {
         promptTokens,
         completionTokens,
         totalTokens: promptTokens + completionTokens,
+        model: modelId,
       },
       model: modelId,
     };
@@ -495,7 +474,7 @@ export async function generateSchemaFromPrompt_F0(
   prompt: string,
   metadata: { teamId: string; functionId?: string; extractId?: string },
 ): Promise<any> {
-  const model = getModel("gpt-4o-mini");
+  const model = getModelForPurpose("schema_generation");
   const temperatures = [0, 0.1, 0.3]; // Different temperatures to try
   let lastError: Error | null = null;
 

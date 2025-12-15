@@ -11,7 +11,7 @@ import {
 } from "../../scraper/scrapeURL/transformers/llmExtract";
 import { ExtractOptions } from "../../controllers/v1/types";
 
-import { getModel } from "../generic-ai";
+import { getModelForPurpose } from "../generic-ai";
 import { CostTracking } from "../cost-tracking";
 import { includesFormat } from "../format-utils";
 interface AnalysisResult {
@@ -343,7 +343,7 @@ export class ResearchLLMService {
         ).text,
       },
       markdown: "",
-      model: getModel("o3-mini"),
+      model: getModelForPurpose("deep_research"),
       costTrackingOptions: {
         costTracking,
         metadata: {

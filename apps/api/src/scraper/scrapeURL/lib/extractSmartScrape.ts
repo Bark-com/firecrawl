@@ -7,7 +7,7 @@ import {
 } from "../transformers/llmExtract";
 import { smartScrape } from "./smartScrape";
 import { parseMarkdown } from "../../../lib/html-to-markdown";
-import { getModel } from "../../../lib/generic-ai";
+import { getModelForPurpose } from "../../../lib/generic-ai";
 import { TokenUsage } from "../../../controllers/v1/types";
 import type { SmartScrapeResult } from "./smartScrape";
 import {
@@ -255,6 +255,7 @@ export async function extractData({
   extractedDataArray: any[];
   warning: any;
   costLimitExceededTokenUsage: number | null;
+  totalUsage?: TokenUsage;
 }> {
   let schema = extractOptions.options.schema;
   const logger = extractOptions.logger;
@@ -452,8 +453,8 @@ export async function extractData({
           const newExtractOptions = {
             ...extractOptions,
             markdown: markdown,
-            model: getModel("gpt-4o-mini", "openai"),
-            retryModel: getModel("gpt-4.1", "openai"),
+            model: getModelForPurpose("extract"),
+            retryModel: getModelForPurpose("extract_fallback"),
             costTrackingOptions: {
               costTracking: extractOptions.costTrackingOptions.costTracking,
               metadata: {
@@ -488,5 +489,6 @@ export async function extractData({
     extractedDataArray: extractedData,
     warning: warning,
     costLimitExceededTokenUsage: costLimitExceededTokenUsage,
+    totalUsage: totalUsage,
   };
 }

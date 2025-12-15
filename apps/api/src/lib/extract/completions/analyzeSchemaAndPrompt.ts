@@ -8,7 +8,7 @@ import {
   buildAnalyzeSchemaPrompt,
   buildAnalyzeSchemaUserPrompt,
 } from "../build-prompts";
-import { getModel } from "../../../lib/generic-ai";
+import { getModelForPurpose } from "../../../lib/generic-ai";
 import { Logger } from "winston";
 import { CostTracking } from "../../cost-tracking";
 export async function analyzeSchemaAndPrompt(
@@ -48,7 +48,7 @@ export async function analyzeSchemaAndPrompt(
 
   const schemaString = JSON.stringify(schema);
 
-  const model = getModel("gpt-4.1", "openai");
+  const model = getModelForPurpose("schema_analysis");
 
   const checkSchema = z
     .object({

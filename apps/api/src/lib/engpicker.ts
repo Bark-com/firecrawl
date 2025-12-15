@@ -5,7 +5,7 @@ import { scrapeURL } from "../scraper/scrapeURL";
 import type { Engine } from "../scraper/scrapeURL/engines";
 import { index_supabase_service } from "../services";
 import { CostTracking } from "./cost-tracking";
-import { getModel } from "./generic-ai";
+import { getModelForPurpose } from "./generic-ai";
 import { logger as _logger } from "./logger";
 import type { Logger } from "winston";
 import {
@@ -65,7 +65,7 @@ async function evaluateURL(
 
   // Use GPT-4o-mini to evaluate if the scrape was actually successful
   const evaluationResult = await generateObject({
-    model: getModel("gpt-4o-mini", "openai"),
+    model: getModelForPurpose("engpicker"),
     schema: z.object({
       is_successful: z.boolean(),
     }),

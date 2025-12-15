@@ -11,27 +11,23 @@ import { rerankLinksWithLLM_F0 } from "./reranker-f0";
 import { extractConfig } from "../config";
 import type { Logger } from "winston";
 import { generateText } from "ai";
-import { getModel } from "../../generic-ai";
+import { getModelForPurpose } from "../../generic-ai";
 import { CostTracking } from "../../cost-tracking";
 import { getACUCTeam } from "../../../controllers/auth";
 
 export async function generateBasicCompletion_FO(
   prompt: string,
   metadata: { teamId: string; extractId?: string },
+  costTracking?: CostTracking,
 ) {
-  const { text } = await generateText({
-    model: getModel("gpt-4o-mini"),
+  const model = getModelForPurpose("extract");
+  const modelId = typeof model === "string" ? model : model.modelId;
+  
+  const { text, usage } = await generateText({
+    model: model,
     prompt: prompt,
     temperature: 0,
-    providerOptions: {
-      google: {
-        labels: {
-          functionId: "generateBasicCompletion_F0",
-          extractId: metadata.extractId ?? "unspecified",
-          teamId: metadata.teamId,
-        },
-      },
-    },
+    providerOptions: {},
     experimental_telemetry: {
       isEnabled: true,
       functionId: "generateBasicCompletion_F0",
@@ -46,6 +42,24 @@ export async function generateBasicCompletion_FO(
       },
     },
   });
+  
+  // Track cost if costTracking is provided
+  if (costTracking) {
+    costTracking.addCall({
+      type: "other",
+      metadata: {
+        module: "extract",
+        method: "generateBasicCompletion_F0",
+      },
+      cost: 0, // Cost calculated elsewhere based on tokens
+      model: modelId,
+      tokens: {
+        input: usage?.inputTokens ?? 0,
+        output: usage?.outputTokens ?? 0,
+      },
+    });
+  }
+  
   return text;
 }
 interface ProcessUrlOptions {
@@ -66,6 +80,7 @@ export async function processUrl_F0(
   updateExtractCallback: (links: string[]) => void,
   logger: Logger,
   teamFlags: TeamFlags,
+  costTracking?: CostTracking,
 ): Promise<string[]> {
   const trace: URLTrace = {
     url: options.url,
@@ -98,6 +113,7 @@ export async function processUrl_F0(
         await generateBasicCompletion_FO(
           buildRefrasedPrompt(options.prompt, baseUrl),
           { teamId: options.teamId, extractId: options.extractId },
+          costTracking,
         )
       )
         ?.replace('"', "")
@@ -222,6 +238,7 @@ export async function processUrl_F0(
         (await generateBasicCompletion_FO(
           buildPreRerankPrompt(rephrasedPrompt, options.schema, baseUrl),
           { teamId: options.teamId, extractId: options.extractId },
+          costTracking,
         )) ??
         "Extract the data according to the schema: " +
           JSON.stringify(options.schema, null, 2);
@@ -243,6 +260,9 @@ export async function processUrl_F0(
       rephrasedPrompt,
     });
 
+    // Use provided costTracking or create a new one for tracking
+    const rerankerCostTracking = costTracking ?? new CostTracking();
+    
     logger.info("Reranking pass 1 (threshold 0.8)...");
     const rerankerResult = await rerankLinksWithLLM_F0(
       {
@@ -255,7 +275,7 @@ export async function processUrl_F0(
           extractId: options.extractId,
         },
       },
-      new CostTracking(),
+      rerankerCostTracking,
     );
     mappedLinks = rerankerResult.mapDocument;
     let tokensUsed = rerankerResult.tokensUsed;
@@ -277,7 +297,7 @@ export async function processUrl_F0(
             extractId: options.extractId,
           },
         },
-        new CostTracking(),
+        rerankerCostTracking,
       );
       mappedLinks = rerankerResult.mapDocument;
       tokensUsed += rerankerResult.tokensUsed;

@@ -9,7 +9,7 @@ import {
   buildBatchExtractPrompt,
   buildBatchExtractSystemPrompt,
 } from "../build-prompts";
-import { getModel } from "../../generic-ai";
+import { getModelForPurpose } from "../../generic-ai";
 import { CostTracking, CostLimitExceededError } from "../../cost-tracking";
 import fs from "fs/promises";
 import { extractData } from "../../../scraper/scrapeURL/lib/extractSmartScrape";
@@ -84,8 +84,8 @@ export async function batchExtractPromise(
     },
     markdown: buildDocument(doc),
     isExtractEndpoint: true,
-    model: getModel("gpt-4o-mini", "openai"),
-    retryModel: getModel("gpt-4.1", "openai"),
+    model: getModelForPurpose("extract"),
+    retryModel: getModelForPurpose("extract_fallback"),
     costTrackingOptions: {
       costTracking: options.costTracking,
       metadata: {
@@ -103,12 +103,13 @@ export async function batchExtractPromise(
 
   let extractedDataArray: any[] = [];
   let warning: string | undefined;
+  let totalUsage: TokenUsage | undefined;
   let smCost = 0,
     oCost = 0,
     smCallCount = 0,
     oCallCount = 0;
   try {
-    const { extractedDataArray: e, warning: w } = await extractData({
+    const { extractedDataArray: e, warning: w, totalUsage: t } = await extractData({
       extractOptions: generationOptions,
       urls: [doc.metadata.sourceURL || doc.metadata.url || ""],
       useAgent,
@@ -123,6 +124,7 @@ export async function batchExtractPromise(
     });
     extractedDataArray = e;
     warning = w;
+    totalUsage = t;
   } catch (error) {
     if (error instanceof CostLimitExceededError) {
       throw error;
@@ -135,15 +137,14 @@ export async function batchExtractPromise(
   //   JSON.stringify(extractedDataArray, null, 2),
   // );
 
-  // TODO: fix this
   return {
     extract: extractedDataArray,
-    numTokens: 0,
-    totalUsage: {
+    numTokens: totalUsage?.totalTokens ?? 0,
+    totalUsage: totalUsage ?? {
       promptTokens: 0,
       completionTokens: 0,
       totalTokens: 0,
-      model: "gemini-2.0-flash",
+      model: "unknown",
     },
     warning: warning,
     sources: [doc.metadata.url || doc.metadata.sourceURL || ""],
