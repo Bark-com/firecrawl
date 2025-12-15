@@ -40,7 +40,7 @@ import { normalizeUrl } from "../canonical-url";
 import { search } from "../../search";
 import { buildRephraseToSerpPrompt } from "./build-prompts";
 import { getACUCTeam } from "../../controllers/auth";
-import { CostLimitExceededError, CostTracking } from "../cost-tracking";
+import { CostLimitExceededError, CostTracking, CostTrackingFull } from "../cost-tracking";
 
 interface ExtractServiceOptions {
   request: ExtractRequest;
@@ -61,11 +61,13 @@ export interface ExtractResult {
   urlTrace?: URLTrace[];
   error?: string;
   tokenUsageBreakdown?: TokenUsage[];
+  /** @deprecated Use costTracking.totalCost instead */
   llmUsage?: number;
   totalUrlsScraped?: number;
   sources?: Record<string, string[]>;
   tokensBilled?: number;
   creditsBilled?: number;
+  costTracking?: CostTrackingFull;
 }
 
 type completions = {
@@ -1072,6 +1074,7 @@ export async function performExtraction(
       sources,
       tokensBilled: tokensToBill,
       creditsBilled: creditsToBill,
+      costTracking: costTracking.toJSON("full") as CostTrackingFull,
     };
   } catch (error) {
     const tokens_billed = 300 + calculateThinkingCost(costTracking);
@@ -1094,7 +1097,7 @@ export async function performExtraction(
       error:
         error instanceof Error ? error.message : "An unexpected error occurred",
       model_kind: "fire-1",
-      cost_tracking: costTracking.toJSON(),
+      cost_tracking: costTracking.toJSON("full"),
     });
 
     throw error;

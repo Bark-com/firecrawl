@@ -7,6 +7,43 @@ import { ExtractResult } from "../../lib/extract/extraction-service";
 import { supabaseGetExtractByIdDirect } from "../../lib/supabase-jobs";
 import { JobState } from "bullmq";
 import { logger as _logger } from "../../lib/logger";
+import {
+  CostTrackingFull,
+  CostTrackingOutput,
+  CostTrackingVerbosity,
+} from "../../lib/cost-tracking";
+
+/**
+ * Applies verbosity level to cost tracking data
+ */
+function applyCostTrackingVerbosity(
+  costTracking: CostTrackingFull | undefined,
+  verbosity: CostTrackingVerbosity = "detailed",
+): CostTrackingOutput | undefined {
+  if (!costTracking) return undefined;
+
+  if (verbosity === "summary") {
+    return {
+      totalCalls: costTracking.totalCalls,
+      totalInputTokens: costTracking.totalInputTokens,
+      totalOutputTokens: costTracking.totalOutputTokens,
+      totalCost: costTracking.totalCost,
+    };
+  }
+
+  if (verbosity === "detailed") {
+    return {
+      totalCalls: costTracking.totalCalls,
+      totalInputTokens: costTracking.totalInputTokens,
+      totalOutputTokens: costTracking.totalOutputTokens,
+      totalCost: costTracking.totalCost,
+      calls: costTracking.calls.map(({ stack, ...rest }) => rest),
+    };
+  }
+
+  // "full" - return everything as-is
+  return costTracking;
+}
 
 type DBExtract = {
   id: string;
@@ -141,7 +178,12 @@ export async function extractStatusController(
     steps: extract?.showSteps ? extract.steps : undefined,
     llmUsage: extract?.showLLMUsage ? extract.llmUsage : undefined,
     sources: extract?.showSources ? extract.sources : undefined,
-    costTracking: extract?.showCostTracking ? extract.costTracking : undefined,
+    costTracking: extract?.showCostTracking
+      ? applyCostTrackingVerbosity(
+          extract.costTracking as CostTrackingFull | undefined,
+          extract.costTrackingVerbosity,
+        )
+      : undefined,
     sessionIds: extract?.sessionIds ? extract.sessionIds : undefined,
     tokensUsed: extract?.tokensBilled ? extract.tokensBilled : undefined,
     creditsUsed: extract?.creditsBilled ? extract.creditsBilled : undefined,

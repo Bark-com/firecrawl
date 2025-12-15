@@ -40,7 +40,7 @@ import {
 } from "./usage/llm-cost-f0";
 import { SourceTracker_F0 } from "./helpers/source-tracker-f0";
 import { getACUCTeam } from "../../../controllers/auth";
-import { CostTracking } from "../../cost-tracking";
+import { CostTracking, CostTrackingFull } from "../../cost-tracking";
 
 interface ExtractServiceOptions {
   request: ExtractRequest;
@@ -60,11 +60,13 @@ interface ExtractResult {
   urlTrace?: URLTrace[];
   error?: string;
   tokenUsageBreakdown?: TokenUsage[];
+  /** @deprecated Use costTracking.totalCost instead */
   llmUsage?: number;
   totalUrlsScraped?: number;
   sources?: Record<string, string[]>;
   tokensBilled?: number;
   creditsBilled?: number;
+  costTracking?: CostTrackingFull;
 }
 
 type completions = {
@@ -890,26 +892,21 @@ export async function performExtraction_F0(
     creditsBilled: creditsToBill,
   });
 
-  // Merge cost tracking from URL processing/reranking with token usage
-  const costTrackingData = costTracking.toJSON();
-  const allCalls = [
-    // Token usage from extraction
-    ...tokenUsage.map(usage => ({
-      type: "other" as const,
+  // Add extraction token usage to cost tracking
+  for (const usage of tokenUsage) {
+    costTracking.addCall({
       cost: estimateCost_F0(usage),
       model: usage.model ?? "",
       metadata: { source: "extraction" },
-      stack: "",
       tokens: {
         input: usage.promptTokens,
         output: usage.completionTokens,
       },
-    })),
-    // Calls from URL processing, reranking, etc.
-    ...costTrackingData.calls,
-  ];
-  
-  const totalCost = llmUsage + costTrackingData.totalCost;
+    });
+  }
+
+  // Get the full cost tracking data for logging and return
+  const costTrackingFull = costTracking.toJSON("full") as CostTrackingFull;
 
   // Log job with token usage and sources
   await logExtract({
@@ -922,14 +919,7 @@ export async function performExtraction_F0(
     credits_cost: creditsToBill,
     is_successful: true,
     result: finalResult ?? {},
-    cost_tracking: {
-      calls: allCalls,
-      smartScrapeCallCount: costTrackingData.smartScrapeCallCount,
-      smartScrapeCost: costTrackingData.smartScrapeCost,
-      otherCallCount: allCalls.length,
-      otherCost: totalCost,
-      totalCost: totalCost,
-    },
+    cost_tracking: costTrackingFull,
   })
     .then(() => {
       logger.debug("Updating extract status to completed", {
@@ -947,14 +937,7 @@ export async function performExtraction_F0(
         sources,
         tokensBilled: tokensToBill,
         creditsBilled: creditsToBill,
-        costTracking: {
-          calls: allCalls,
-          smartScrapeCallCount: costTrackingData.smartScrapeCallCount,
-          smartScrapeCost: costTrackingData.smartScrapeCost,
-          otherCallCount: allCalls.length,
-          otherCost: totalCost,
-          totalCost: totalCost,
-        } as any,
+        costTracking: costTrackingFull,
       });
     })
     .catch(error => {
@@ -989,5 +972,6 @@ export async function performExtraction_F0(
     sources,
     tokensBilled: tokensToBill,
     creditsBilled: creditsToBill,
+    costTracking: costTrackingFull,
   };
 }

@@ -1,6 +1,9 @@
 import { redisEvictConnection } from "../../services/redis";
 import { logger as _logger } from "../logger";
-import { CostTracking } from "../cost-tracking";
+import {
+  CostTrackingOutput,
+  CostTrackingVerbosity,
+} from "../cost-tracking";
 
 export enum ExtractStep {
   INITIAL = "initial",
@@ -34,7 +37,8 @@ type StoredExtract = {
   showSources?: boolean;
   llmUsage?: number;
   showCostTracking?: boolean;
-  costTracking?: CostTracking;
+  costTrackingVerbosity?: CostTrackingVerbosity;
+  costTracking?: CostTrackingOutput;
   sources?: {
     [key: string]: string[];
   };

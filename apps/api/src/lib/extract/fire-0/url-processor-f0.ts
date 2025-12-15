@@ -46,7 +46,6 @@ export async function generateBasicCompletion_FO(
   // Track cost if costTracking is provided
   if (costTracking) {
     costTracking.addCall({
-      type: "other",
       metadata: {
         module: "extract",
         method: "generateBasicCompletion_F0",

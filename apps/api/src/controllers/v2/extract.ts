@@ -165,6 +165,7 @@ export async function extractController(
     showLLMUsage: req.body.__experimental_llmUsage,
     showSources: req.body.__experimental_showSources || req.body.showSources,
     showCostTracking: req.body.__experimental_showCostTracking,
+    costTrackingVerbosity: req.body.__experimental_costTrackingVerbosity,
     zeroDataRetention: req.acuc?.flags?.forceZDR,
   });
 

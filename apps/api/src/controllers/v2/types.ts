@@ -683,6 +683,7 @@ const extractOptions = z
     timeout: z.int().positive().finite().optional(),
     agent: agentOptionsExtract.optional(),
     __experimental_streamSteps: z.boolean().prefault(false),
+    /** @deprecated Use __experimental_showCostTracking with costTracking.totalCost instead */
     __experimental_llmUsage: z.boolean().prefault(false),
     __experimental_showSources: z.boolean().prefault(false),
     showSources: z.boolean().prefault(false),
@@ -692,6 +693,10 @@ const extractOptions = z
       .prefault("direct")
       .optional(),
     __experimental_showCostTracking: z.boolean().prefault(false),
+    __experimental_costTrackingVerbosity: z
+      .enum(["summary", "detailed", "full"])
+      .prefault("detailed")
+      .optional(),
     ignoreInvalidURLs: z.boolean().prefault(true),
     webhook: webhookSchema.optional(),
   })

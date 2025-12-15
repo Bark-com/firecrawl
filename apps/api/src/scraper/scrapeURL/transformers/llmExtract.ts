@@ -456,7 +456,6 @@ export async function generateCompletions({
         });
 
         costTrackingOptions.costTracking.addCall({
-          type: "other",
           metadata: {
             ...costTrackingOptions.metadata,
             gcDetails: "no-object",
@@ -556,7 +555,6 @@ export async function generateCompletions({
             extract = result.text;
 
             costTrackingOptions.costTracking.addCall({
-              type: "other",
               metadata: {
                 ...costTrackingOptions.metadata,
                 gcDetails: "no-object fallback",
@@ -716,7 +714,6 @@ export async function generateCompletions({
           });
 
           costTrackingOptions.costTracking.addCall({
-            type: "other",
             metadata: {
               ...costTrackingOptions.metadata,
               gcDetails: "repairConfig",
@@ -830,7 +827,6 @@ export async function generateCompletions({
     try {
       result = await generateObject(generateObjectConfig);
       costTrackingOptions.costTracking.addCall({
-        type: "other",
         metadata: {
           ...costTrackingOptions.metadata,
           gcDetails: "generateObject",
@@ -869,7 +865,6 @@ export async function generateCompletions({
           };
           result = await generateObject(retryConfig);
           costTrackingOptions.costTracking.addCall({
-            type: "other",
             metadata: {
               ...costTrackingOptions.metadata,
               gcDetails: "generateObject fallback",

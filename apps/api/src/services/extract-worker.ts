@@ -102,6 +102,7 @@ const processExtractJobInternal = async (
         sources: result.sources,
         tokensBilled: result.tokensBilled,
         creditsBilled: result.creditsBilled,
+        costTracking: result.costTracking,
       });
 
       await job.moveToCompleted(result, token, false);

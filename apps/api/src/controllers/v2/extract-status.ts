@@ -12,6 +12,43 @@ import {
 import { JobState } from "bullmq";
 import { logger as _logger } from "../../lib/logger";
 import { getJobFromGCS } from "../../lib/gcs-jobs";
+import {
+  CostTrackingFull,
+  CostTrackingOutput,
+  CostTrackingVerbosity,
+} from "../../lib/cost-tracking";
+
+/**
+ * Applies verbosity level to cost tracking data
+ */
+function applyCostTrackingVerbosity(
+  costTracking: CostTrackingFull | undefined,
+  verbosity: CostTrackingVerbosity = "detailed",
+): CostTrackingOutput | undefined {
+  if (!costTracking) return undefined;
+
+  if (verbosity === "summary") {
+    return {
+      totalCalls: costTracking.totalCalls,
+      totalInputTokens: costTracking.totalInputTokens,
+      totalOutputTokens: costTracking.totalOutputTokens,
+      totalCost: costTracking.totalCost,
+    };
+  }
+
+  if (verbosity === "detailed") {
+    return {
+      totalCalls: costTracking.totalCalls,
+      totalInputTokens: costTracking.totalInputTokens,
+      totalOutputTokens: costTracking.totalOutputTokens,
+      totalCost: costTracking.totalCost,
+      calls: costTracking.calls.map(({ stack, ...rest }) => rest),
+    };
+  }
+
+  // "full" - return everything as-is
+  return costTracking;
+}
 
 type DBExtract = {
   id: string;
@@ -159,7 +196,10 @@ export async function extractStatusController(
     llmUsage: redisExtract?.showLLMUsage ? redisExtract.llmUsage : undefined,
     sources: redisExtract?.showSources ? redisExtract.sources : undefined,
     costTracking: redisExtract?.showCostTracking
-      ? redisExtract.costTracking
+      ? applyCostTrackingVerbosity(
+          redisExtract.costTracking as CostTrackingFull | undefined,
+          redisExtract.costTrackingVerbosity,
+        )
       : undefined,
     sessionIds: redisExtract?.sessionIds ? redisExtract.sessionIds : undefined,
     tokensUsed: redisExtract?.tokensBilled

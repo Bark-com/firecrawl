@@ -128,7 +128,6 @@ export async function smartScrape({
           "Failed smart scrape cost $" + (errorResponse as any).tokenUsage,
         );
         costTracking.addCall({
-          type: "smartScrape",
           cost: (errorResponse as any).tokenUsage,
           model: "firecrawl/smart-scrape",
           metadata: {
@@ -161,7 +160,6 @@ export async function smartScrape({
 
     logger.info("Smart scrape cost $" + response.tokenUsage);
     costTracking.addCall({
-      type: "smartScrape",
       cost: response.tokenUsage,
       model: "firecrawl/smart-scrape",
       metadata: {
@@ -191,7 +189,6 @@ export async function smartScrape({
         if (json.tokenUsage) {
           logger.info("Failed smart scrape cost $" + json.tokenUsage);
           costTracking.addCall({
-            type: "smartScrape",
             cost: json.tokenUsage,
             model: "firecrawl/smart-scrape",
             metadata: {

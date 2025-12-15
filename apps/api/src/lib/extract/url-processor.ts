@@ -40,7 +40,6 @@ export async function generateBasicCompletion(
       },
     });
     costTracking.addCall({
-      type: "other",
       metadata: {
         module: "extract",
         method: "generateBasicCompletion",
@@ -84,7 +83,6 @@ export async function generateBasicCompletion(
           },
         });
         costTracking.addCall({
-          type: "other",
           metadata: {
             module: "extract",
             method: "generateBasicCompletion",
