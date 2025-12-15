@@ -764,6 +764,31 @@ class ExtractRequest(BaseModel):
     agent: Optional[AgentOptions] = None
 
 
+class CostTrackingCall(BaseModel):
+    """A single LLM call in the cost tracking breakdown."""
+
+    model_config = {"extra": "allow"}
+
+    type: Optional[str] = None
+    cost: Optional[float] = None
+    model: Optional[str] = None
+    metadata: Optional[Dict[str, Any]] = None
+    tokens: Optional[Dict[str, int]] = None
+
+
+class CostTrackingData(BaseModel):
+    """Detailed cost tracking breakdown for extract operations."""
+
+    model_config = {"extra": "allow"}
+
+    calls: Optional[List[CostTrackingCall]] = None
+    smart_scrape_call_count: Optional[int] = None
+    smart_scrape_cost: Optional[float] = None
+    other_call_count: Optional[int] = None
+    other_cost: Optional[float] = None
+    total_cost: Optional[float] = None
+
+
 class ExtractResponse(BaseModel):
     """Response for extract operations (start/status/final)."""
 
@@ -778,6 +803,9 @@ class ExtractResponse(BaseModel):
     credits_used: Optional[int] = None
     tokens_used: Optional[int] = None
 
+    # Cost tracking fields (requires __experimental_showCostTracking=True and __experimental_llmUsage=True)
+    llm_usage: Optional[float] = None  # Total LLM cost in dollars
+    cost_tracking: Optional[CostTrackingData] = None  # Detailed breakdown
 
 class AgentResponse(BaseModel):
     """Response for agent operations (start/status/final)."""

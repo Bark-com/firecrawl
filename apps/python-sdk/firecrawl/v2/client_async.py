@@ -263,7 +263,31 @@ class AsyncFirecrawlClient:
         poll_interval: int = 2,
         timeout: Optional[int] = None,
         integration: Optional[str] = None,
+        limit: Optional[int] = None,
+        show_llm_usage: Optional[bool] = None,
+        show_cost_tracking: Optional[bool] = None,
     ):
+        """Extract structured data from URLs and wait until completion (async).
+
+        Args:
+            urls: URLs to extract from (can use wildcards like "https://example.com/*")
+            prompt: Natural-language instruction for extraction
+            schema: Target JSON schema for the output
+            system_prompt: Optional system instruction
+            allow_external_links: Allow hyperlinks in output
+            enable_web_search: Whether to augment with web search
+            show_sources: Include per-field/source mapping when available
+            scrape_options: Scrape options applied prior to extraction
+            ignore_invalid_urls: Skip invalid URLs instead of failing
+            poll_interval: Seconds between status checks
+            timeout: Maximum seconds to wait (None for no timeout)
+            integration: Integration tag/name
+            limit: Maximum number of pages to scrape
+            show_llm_usage: Include total LLM cost in dollars (for self-hosted)
+            show_cost_tracking: Include detailed cost breakdown per LLM call (for self-hosted)
+        Returns:
+            Final extract response when completed (includes llm_usage and cost_tracking if enabled)
+        """
         return await async_extract.extract(
             self.async_http_client,
             urls,
@@ -278,6 +302,9 @@ class AsyncFirecrawlClient:
             poll_interval=poll_interval,
             timeout=timeout,
             integration=integration,
+            limit=limit,
+            show_llm_usage=show_llm_usage,
+            show_cost_tracking=show_cost_tracking,
         )
 
     async def get_extract_status(self, job_id: str):
@@ -296,7 +323,22 @@ class AsyncFirecrawlClient:
         scrape_options: Optional['ScrapeOptions'] = None,
         ignore_invalid_urls: Optional[bool] = None,
         integration: Optional[str] = None,
+        limit: Optional[int] = None,
+        show_llm_usage: Optional[bool] = None,
+        show_cost_tracking: Optional[bool] = None,
     ):
+        """Start an extract job without waiting (async).
+
+        Args:
+            urls: URLs to extract from (can use wildcards)
+            prompt: Natural-language instruction for extraction
+            schema: Target JSON schema for the output
+            limit: Maximum number of pages to scrape
+            show_llm_usage: Include total LLM cost in dollars (for self-hosted)
+            show_cost_tracking: Include detailed cost breakdown (for self-hosted)
+        Returns:
+            Extract response with job ID for status polling
+        """
         return await async_extract.start_extract(
             self.async_http_client,
             urls,
@@ -309,6 +351,9 @@ class AsyncFirecrawlClient:
             scrape_options=scrape_options,
             ignore_invalid_urls=ignore_invalid_urls,
             integration=integration,
+            limit=limit,
+            show_llm_usage=show_llm_usage,
+            show_cost_tracking=show_cost_tracking,
         )
 
     # Agent

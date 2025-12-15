@@ -1,7 +1,7 @@
 from typing import Any, Dict, List, Optional
 import asyncio
 
-from ...types import ExtractResponse, ScrapeOptions
+from ...types import ExtractResponse, ScrapeOptions, AgentOptions
 from ...utils.http_client_async import AsyncHttpClient
 from ...utils.validation import prepare_scrape_options
 
@@ -18,6 +18,11 @@ def _prepare_extract_request(
     scrape_options: Optional[ScrapeOptions] = None,
     ignore_invalid_urls: Optional[bool] = None,
     integration: Optional[str] = None,
+    agent: Optional[AgentOptions] = None,
+    limit: Optional[int] = None,
+    # Cost tracking options (for self-hosted)
+    show_llm_usage: Optional[bool] = None,
+    show_cost_tracking: Optional[bool] = None,
 ) -> Dict[str, Any]:
     body: Dict[str, Any] = {}
     if urls is not None:
@@ -42,7 +47,54 @@ def _prepare_extract_request(
             body["scrapeOptions"] = prepared
     if integration is not None and str(integration).strip():
         body["integration"] = str(integration).strip()
+    if agent is not None:
+        try:
+            body["agent"] = agent.model_dump(exclude_none=True)  # type: ignore[attr-defined]
+        except AttributeError:
+            body["agent"] = agent  # fallback
+    if limit is not None:
+        body["limit"] = limit
+    # Cost tracking flags (useful for self-hosted deployments)
+    if show_llm_usage is not None:
+        body["__experimental_llmUsage"] = show_llm_usage
+    if show_cost_tracking is not None:
+        body["__experimental_showCostTracking"] = show_cost_tracking
     return body
+
+
+def _normalize_extract_response_payload(payload: Dict[str, Any]) -> Dict[str, Any]:
+    """Normalize camelCase API response to snake_case for Pydantic model."""
+    out = dict(payload)
+    if "expiresAt" in out and "expires_at" not in out:
+        out["expires_at"] = out["expiresAt"]
+    if "creditsUsed" in out and "credits_used" not in out:
+        out["credits_used"] = out["creditsUsed"]
+    if "tokensUsed" in out and "tokens_used" not in out:
+        out["tokens_used"] = out["tokensUsed"]
+    # Cost tracking fields (from __experimental_showCostTracking and __experimental_llmUsage)
+    if "llmUsage" in out and "llm_usage" not in out:
+        out["llm_usage"] = out["llmUsage"]
+    if "costTracking" in out and "cost_tracking" not in out:
+        ct = out["costTracking"]
+        if isinstance(ct, dict):
+            # Normalize nested camelCase fields
+            normalized_ct = {}
+            if "smartScrapeCallCount" in ct:
+                normalized_ct["smart_scrape_call_count"] = ct["smartScrapeCallCount"]
+            if "smartScrapeCost" in ct:
+                normalized_ct["smart_scrape_cost"] = ct["smartScrapeCost"]
+            if "otherCallCount" in ct:
+                normalized_ct["other_call_count"] = ct["otherCallCount"]
+            if "otherCost" in ct:
+                normalized_ct["other_cost"] = ct["otherCost"]
+            if "totalCost" in ct:
+                normalized_ct["total_cost"] = ct["totalCost"]
+            if "calls" in ct:
+                normalized_ct["calls"] = ct["calls"]  # Keep calls as-is
+            out["cost_tracking"] = normalized_ct
+        else:
+            out["cost_tracking"] = ct
+    return out
 
 
 async def start_extract(
@@ -58,6 +110,10 @@ async def start_extract(
     scrape_options: Optional[ScrapeOptions] = None,
     ignore_invalid_urls: Optional[bool] = None,
     integration: Optional[str] = None,
+    agent: Optional[AgentOptions] = None,
+    limit: Optional[int] = None,
+    show_llm_usage: Optional[bool] = None,
+    show_cost_tracking: Optional[bool] = None,
 ) -> ExtractResponse:
     body = _prepare_extract_request(
         urls,
@@ -70,14 +126,20 @@ async def start_extract(
         scrape_options=scrape_options,
         ignore_invalid_urls=ignore_invalid_urls,
         integration=integration,
+        agent=agent,
+        limit=limit,
+        show_llm_usage=show_llm_usage,
+        show_cost_tracking=show_cost_tracking,
     )
     resp = await client.post("/v2/extract", body)
-    return ExtractResponse(**resp.json())
+    payload = _normalize_extract_response_payload(resp.json())
+    return ExtractResponse(**payload)
 
 
 async def get_extract_status(client: AsyncHttpClient, job_id: str) -> ExtractResponse:
     resp = await client.get(f"/v2/extract/{job_id}")
-    return ExtractResponse(**resp.json())
+    payload = _normalize_extract_response_payload(resp.json())
+    return ExtractResponse(**payload)
 
 
 async def wait_extract(
@@ -112,7 +174,36 @@ async def extract(
     poll_interval: int = 2,
     timeout: Optional[int] = None,
     integration: Optional[str] = None,
+    agent: Optional[AgentOptions] = None,
+    limit: Optional[int] = None,
+    show_llm_usage: Optional[bool] = None,
+    show_cost_tracking: Optional[bool] = None,
 ) -> ExtractResponse:
+    """
+    Extract structured data from URLs using LLM (async version).
+
+    Args:
+        client: Async HTTP client instance
+        urls: List of URLs to extract from (can use wildcards like "https://example.com/*")
+        prompt: Natural language prompt describing what to extract
+        schema: JSON schema for the expected output structure
+        system_prompt: Optional system prompt for the LLM
+        allow_external_links: Whether to follow external links
+        enable_web_search: Whether to enable web search for finding URLs
+        show_sources: Whether to include source information in response
+        scrape_options: Options for the underlying scraper
+        ignore_invalid_urls: Whether to skip invalid URLs instead of failing
+        poll_interval: Seconds between status polls (default: 2)
+        timeout: Maximum seconds to wait for completion
+        integration: Integration identifier
+        agent: Agent options (e.g., for FIRE-1 model)
+        limit: Maximum number of pages to scrape
+        show_llm_usage: Whether to include LLM cost in dollars (self-hosted)
+        show_cost_tracking: Whether to include detailed cost breakdown (self-hosted)
+
+    Returns:
+        ExtractResponse with extracted data and optional cost tracking info
+    """
     started = await start_extract(
         client,
         urls,
@@ -125,9 +216,12 @@ async def extract(
         scrape_options=scrape_options,
         ignore_invalid_urls=ignore_invalid_urls,
         integration=integration,
+        agent=agent,
+        limit=limit,
+        show_llm_usage=show_llm_usage,
+        show_cost_tracking=show_cost_tracking,
     )
     job_id = getattr(started, "id", None)
     if not job_id:
         return started
     return await wait_extract(client, job_id, poll_interval=poll_interval, timeout=timeout)
-

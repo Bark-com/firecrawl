@@ -563,11 +563,14 @@ class FirecrawlClient:
         timeout: Optional[int] = None,
         integration: Optional[str] = None,
         agent: Optional[AgentOptions] = None,
+        limit: Optional[int] = None,
+        show_llm_usage: Optional[bool] = None,
+        show_cost_tracking: Optional[bool] = None,
     ):
         """Extract structured data and wait until completion.
 
         Args:
-            urls: URLs to extract from (optional)
+            urls: URLs to extract from (optional, can use wildcards like "https://example.com/*")
             prompt: Natural-language instruction for extraction
             schema: Target JSON schema for the output
             system_prompt: Optional system instruction
@@ -580,8 +583,11 @@ class FirecrawlClient:
             timeout: Maximum seconds to wait (None for no timeout)
             integration: Integration tag/name
             agent: Agent configuration
+            limit: Maximum number of pages to scrape
+            show_llm_usage: Include total LLM cost in dollars (for self-hosted)
+            show_cost_tracking: Include detailed cost breakdown per LLM call (for self-hosted)
         Returns:
-            Final extract response when completed
+            Final extract response when completed (includes llm_usage and cost_tracking if enabled)
         """
         return extract_module.extract(
             self.http_client,
@@ -598,6 +604,9 @@ class FirecrawlClient:
             timeout=timeout,
             integration=integration,
             agent=agent,
+            limit=limit,
+            show_llm_usage=show_llm_usage,
+            show_cost_tracking=show_cost_tracking,
         )
 
     def start_batch_scrape(

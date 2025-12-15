@@ -21,6 +21,10 @@ def _prepare_extract_request(
     ignore_invalid_urls: Optional[bool] = None,
     integration: Optional[str] = None,
     agent: Optional[AgentOptions] = None,
+    limit: Optional[int] = None,
+    # Cost tracking options (for self-hosted)
+    show_llm_usage: Optional[bool] = None,
+    show_cost_tracking: Optional[bool] = None,
 ) -> Dict[str, Any]:
     body: Dict[str, Any] = {}
     if urls is not None:
@@ -50,6 +54,13 @@ def _prepare_extract_request(
             body["agent"] = agent.model_dump(exclude_none=True)  # type: ignore[attr-defined]
         except AttributeError:
             body["agent"] = agent  # fallback
+    if limit is not None:
+        body["limit"] = limit
+    # Cost tracking flags (useful for self-hosted deployments)
+    if show_llm_usage is not None:
+        body["__experimental_llmUsage"] = show_llm_usage
+    if show_cost_tracking is not None:
+        body["__experimental_showCostTracking"] = show_cost_tracking
     return body
 
 
@@ -61,6 +72,29 @@ def _normalize_extract_response_payload(payload: Dict[str, Any]) -> Dict[str, An
         out["credits_used"] = out["creditsUsed"]
     if "tokensUsed" in out and "tokens_used" not in out:
         out["tokens_used"] = out["tokensUsed"]
+    # Cost tracking fields (from __experimental_showCostTracking and __experimental_llmUsage)
+    if "llmUsage" in out and "llm_usage" not in out:
+        out["llm_usage"] = out["llmUsage"]
+    if "costTracking" in out and "cost_tracking" not in out:
+        ct = out["costTracking"]
+        if isinstance(ct, dict):
+            # Normalize nested camelCase fields
+            normalized_ct = {}
+            if "smartScrapeCallCount" in ct:
+                normalized_ct["smart_scrape_call_count"] = ct["smartScrapeCallCount"]
+            if "smartScrapeCost" in ct:
+                normalized_ct["smart_scrape_cost"] = ct["smartScrapeCost"]
+            if "otherCallCount" in ct:
+                normalized_ct["other_call_count"] = ct["otherCallCount"]
+            if "otherCost" in ct:
+                normalized_ct["other_cost"] = ct["otherCost"]
+            if "totalCost" in ct:
+                normalized_ct["total_cost"] = ct["totalCost"]
+            if "calls" in ct:
+                normalized_ct["calls"] = ct["calls"]  # Keep calls as-is
+            out["cost_tracking"] = normalized_ct
+        else:
+            out["cost_tracking"] = ct
     return out
 
 
@@ -78,6 +112,9 @@ def start_extract(
     ignore_invalid_urls: Optional[bool] = None,
     integration: Optional[str] = None,
     agent: Optional[AgentOptions] = None,
+    limit: Optional[int] = None,
+    show_llm_usage: Optional[bool] = None,
+    show_cost_tracking: Optional[bool] = None,
 ) -> ExtractResponse:
     body = _prepare_extract_request(
         urls,
@@ -91,6 +128,9 @@ def start_extract(
         ignore_invalid_urls=ignore_invalid_urls,
         integration=integration,
         agent=agent,
+        limit=limit,
+        show_llm_usage=show_llm_usage,
+        show_cost_tracking=show_cost_tracking,
     )
     resp = client.post("/v2/extract", body)
     if not resp.ok:
@@ -140,7 +180,35 @@ def extract(
     timeout: Optional[int] = None,
     integration: Optional[str] = None,
     agent: Optional[AgentOptions] = None,
+    limit: Optional[int] = None,
+    show_llm_usage: Optional[bool] = None,
+    show_cost_tracking: Optional[bool] = None,
 ) -> ExtractResponse:
+    """
+    Extract structured data from URLs using LLM.
+
+    Args:
+        client: HTTP client instance
+        urls: List of URLs to extract from (can use wildcards like "https://example.com/*")
+        prompt: Natural language prompt describing what to extract
+        schema: JSON schema for the expected output structure
+        system_prompt: Optional system prompt for the LLM
+        allow_external_links: Whether to follow external links
+        enable_web_search: Whether to enable web search for finding URLs
+        show_sources: Whether to include source information in response
+        scrape_options: Options for the underlying scraper
+        ignore_invalid_urls: Whether to skip invalid URLs instead of failing
+        poll_interval: Seconds between status polls (default: 2)
+        timeout: Maximum seconds to wait for completion
+        integration: Integration identifier
+        agent: Agent options (e.g., for FIRE-1 model)
+        limit: Maximum number of pages to scrape
+        show_llm_usage: Whether to include LLM cost in dollars (self-hosted)
+        show_cost_tracking: Whether to include detailed cost breakdown (self-hosted)
+
+    Returns:
+        ExtractResponse with extracted data and optional cost tracking info
+    """
     started = start_extract(
         client,
         urls,
@@ -154,6 +222,9 @@ def extract(
         ignore_invalid_urls=ignore_invalid_urls,
         integration=integration,
         agent=agent,
+        limit=limit,
+        show_llm_usage=show_llm_usage,
+        show_cost_tracking=show_cost_tracking,
     )
     job_id = getattr(started, "id", None)
     if not job_id:
