@@ -1,9 +1,13 @@
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Literal, Optional
 import asyncio
 
 from ...types import ExtractResponse, ScrapeOptions, AgentOptions
 from ...utils.http_client_async import AsyncHttpClient
 from ...utils.validation import prepare_scrape_options
+
+
+# Type alias for verbosity levels
+CostTrackingVerbosity = Literal["summary", "detailed", "full"]
 
 
 def _prepare_extract_request(
@@ -23,6 +27,7 @@ def _prepare_extract_request(
     # Cost tracking options (for self-hosted)
     show_llm_usage: Optional[bool] = None,
     show_cost_tracking: Optional[bool] = None,
+    cost_tracking_verbosity: Optional[CostTrackingVerbosity] = None,
 ) -> Dict[str, Any]:
     body: Dict[str, Any] = {}
     if urls is not None:
@@ -59,6 +64,8 @@ def _prepare_extract_request(
         body["__experimental_llmUsage"] = show_llm_usage
     if show_cost_tracking is not None:
         body["__experimental_showCostTracking"] = show_cost_tracking
+    if cost_tracking_verbosity is not None:
+        body["__experimental_costTrackingVerbosity"] = cost_tracking_verbosity
     return body
 
 
@@ -77,18 +84,18 @@ def _normalize_extract_response_payload(payload: Dict[str, Any]) -> Dict[str, An
     if "costTracking" in out and "cost_tracking" not in out:
         ct = out["costTracking"]
         if isinstance(ct, dict):
-            # Normalize nested camelCase fields
-            normalized_ct = {}
-            if "smartScrapeCallCount" in ct:
-                normalized_ct["smart_scrape_call_count"] = ct["smartScrapeCallCount"]
-            if "smartScrapeCost" in ct:
-                normalized_ct["smart_scrape_cost"] = ct["smartScrapeCost"]
-            if "otherCallCount" in ct:
-                normalized_ct["other_call_count"] = ct["otherCallCount"]
-            if "otherCost" in ct:
-                normalized_ct["other_cost"] = ct["otherCost"]
+            # Normalize nested camelCase fields to snake_case
+            normalized_ct: Dict[str, Any] = {}
+            # New format fields (summary)
+            if "totalCalls" in ct:
+                normalized_ct["total_calls"] = ct["totalCalls"]
+            if "totalInputTokens" in ct:
+                normalized_ct["total_input_tokens"] = ct["totalInputTokens"]
+            if "totalOutputTokens" in ct:
+                normalized_ct["total_output_tokens"] = ct["totalOutputTokens"]
             if "totalCost" in ct:
                 normalized_ct["total_cost"] = ct["totalCost"]
+            # Calls array (detailed/full)
             if "calls" in ct:
                 normalized_ct["calls"] = ct["calls"]  # Keep calls as-is
             out["cost_tracking"] = normalized_ct
@@ -114,6 +121,7 @@ async def start_extract(
     limit: Optional[int] = None,
     show_llm_usage: Optional[bool] = None,
     show_cost_tracking: Optional[bool] = None,
+    cost_tracking_verbosity: Optional[CostTrackingVerbosity] = None,
 ) -> ExtractResponse:
     body = _prepare_extract_request(
         urls,
@@ -130,6 +138,7 @@ async def start_extract(
         limit=limit,
         show_llm_usage=show_llm_usage,
         show_cost_tracking=show_cost_tracking,
+        cost_tracking_verbosity=cost_tracking_verbosity,
     )
     resp = await client.post("/v2/extract", body)
     payload = _normalize_extract_response_payload(resp.json())
@@ -178,6 +187,7 @@ async def extract(
     limit: Optional[int] = None,
     show_llm_usage: Optional[bool] = None,
     show_cost_tracking: Optional[bool] = None,
+    cost_tracking_verbosity: Optional[CostTrackingVerbosity] = None,
 ) -> ExtractResponse:
     """
     Extract structured data from URLs using LLM (async version).
@@ -198,8 +208,12 @@ async def extract(
         integration: Integration identifier
         agent: Agent options (e.g., for FIRE-1 model)
         limit: Maximum number of pages to scrape
-        show_llm_usage: Whether to include LLM cost in dollars (self-hosted)
-        show_cost_tracking: Whether to include detailed cost breakdown (self-hosted)
+        show_llm_usage: [DEPRECATED] Use show_cost_tracking instead. Whether to include LLM cost in dollars (self-hosted)
+        show_cost_tracking: Whether to include cost tracking data (self-hosted)
+        cost_tracking_verbosity: Level of detail for cost tracking: "summary", "detailed" (default), or "full"
+            - "summary": Only totals (total_calls, total_input_tokens, total_output_tokens, total_cost)
+            - "detailed": Totals + per-call breakdown (without stack traces)
+            - "full": Everything including stack traces for debugging
 
     Returns:
         ExtractResponse with extracted data and optional cost tracking info
@@ -220,6 +234,7 @@ async def extract(
         limit=limit,
         show_llm_usage=show_llm_usage,
         show_cost_tracking=show_cost_tracking,
+        cost_tracking_verbosity=cost_tracking_verbosity,
     )
     job_id = getattr(started, "id", None)
     if not job_id:

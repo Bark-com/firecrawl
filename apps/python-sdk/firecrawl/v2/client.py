@@ -514,6 +514,10 @@ class FirecrawlClient:
         ignore_invalid_urls: Optional[bool] = None,
         integration: Optional[str] = None,
         agent: Optional[AgentOptions] = None,
+        limit: Optional[int] = None,
+        show_llm_usage: Optional[bool] = None,
+        show_cost_tracking: Optional[bool] = None,
+        cost_tracking_verbosity: Optional[Literal["summary", "detailed", "full"]] = None,
     ):
         """Start an extract job (non-blocking).
 
@@ -529,6 +533,10 @@ class FirecrawlClient:
             ignore_invalid_urls: Skip invalid URLs instead of failing
             integration: Integration tag/name
             agent: Agent configuration
+            limit: Maximum number of pages to scrape
+            show_llm_usage: [DEPRECATED] Include total LLM cost in dollars (for self-hosted)
+            show_cost_tracking: Include cost tracking data (for self-hosted)
+            cost_tracking_verbosity: Level of detail: "summary", "detailed", or "full"
         Returns:
             Response payload with job id/status (poll with get_extract_status)
         """
@@ -545,6 +553,10 @@ class FirecrawlClient:
             ignore_invalid_urls=ignore_invalid_urls,
             integration=integration,
             agent=agent,
+            limit=limit,
+            show_llm_usage=show_llm_usage,
+            show_cost_tracking=show_cost_tracking,
+            cost_tracking_verbosity=cost_tracking_verbosity,
         )
 
     def extract(
@@ -566,6 +578,7 @@ class FirecrawlClient:
         limit: Optional[int] = None,
         show_llm_usage: Optional[bool] = None,
         show_cost_tracking: Optional[bool] = None,
+        cost_tracking_verbosity: Optional[Literal["summary", "detailed", "full"]] = None,
     ):
         """Extract structured data and wait until completion.
 
@@ -584,10 +597,14 @@ class FirecrawlClient:
             integration: Integration tag/name
             agent: Agent configuration
             limit: Maximum number of pages to scrape
-            show_llm_usage: Include total LLM cost in dollars (for self-hosted)
-            show_cost_tracking: Include detailed cost breakdown per LLM call (for self-hosted)
+            show_llm_usage: [DEPRECATED] Use show_cost_tracking instead. Include total LLM cost in dollars (for self-hosted)
+            show_cost_tracking: Include cost tracking data (for self-hosted)
+            cost_tracking_verbosity: Level of detail for cost tracking: "summary", "detailed" (default), or "full"
+                - "summary": Only totals (total_calls, total_input_tokens, total_output_tokens, total_cost)
+                - "detailed": Totals + per-call breakdown (without stack traces)
+                - "full": Everything including stack traces for debugging
         Returns:
-            Final extract response when completed (includes llm_usage and cost_tracking if enabled)
+            Final extract response when completed (includes cost_tracking if enabled)
         """
         return extract_module.extract(
             self.http_client,
@@ -607,6 +624,7 @@ class FirecrawlClient:
             limit=limit,
             show_llm_usage=show_llm_usage,
             show_cost_tracking=show_cost_tracking,
+            cost_tracking_verbosity=cost_tracking_verbosity,
         )
 
     def start_batch_scrape(

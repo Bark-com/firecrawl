@@ -266,6 +266,7 @@ class AsyncFirecrawlClient:
         limit: Optional[int] = None,
         show_llm_usage: Optional[bool] = None,
         show_cost_tracking: Optional[bool] = None,
+        cost_tracking_verbosity: Optional[str] = None,
     ):
         """Extract structured data from URLs and wait until completion (async).
 
@@ -283,10 +284,11 @@ class AsyncFirecrawlClient:
             timeout: Maximum seconds to wait (None for no timeout)
             integration: Integration tag/name
             limit: Maximum number of pages to scrape
-            show_llm_usage: Include total LLM cost in dollars (for self-hosted)
-            show_cost_tracking: Include detailed cost breakdown per LLM call (for self-hosted)
+            show_llm_usage: [DEPRECATED] Use show_cost_tracking instead. Include total LLM cost in dollars (for self-hosted)
+            show_cost_tracking: Include cost tracking data (for self-hosted)
+            cost_tracking_verbosity: Level of detail for cost tracking: "summary", "detailed" (default), or "full"
         Returns:
-            Final extract response when completed (includes llm_usage and cost_tracking if enabled)
+            Final extract response when completed (includes cost_tracking if enabled)
         """
         return await async_extract.extract(
             self.async_http_client,
@@ -305,6 +307,7 @@ class AsyncFirecrawlClient:
             limit=limit,
             show_llm_usage=show_llm_usage,
             show_cost_tracking=show_cost_tracking,
+            cost_tracking_verbosity=cost_tracking_verbosity,
         )
 
     async def get_extract_status(self, job_id: str):
@@ -326,6 +329,7 @@ class AsyncFirecrawlClient:
         limit: Optional[int] = None,
         show_llm_usage: Optional[bool] = None,
         show_cost_tracking: Optional[bool] = None,
+        cost_tracking_verbosity: Optional[str] = None,
     ):
         """Start an extract job without waiting (async).
 
@@ -334,8 +338,9 @@ class AsyncFirecrawlClient:
             prompt: Natural-language instruction for extraction
             schema: Target JSON schema for the output
             limit: Maximum number of pages to scrape
-            show_llm_usage: Include total LLM cost in dollars (for self-hosted)
-            show_cost_tracking: Include detailed cost breakdown (for self-hosted)
+            show_llm_usage: [DEPRECATED] Include total LLM cost in dollars (for self-hosted)
+            show_cost_tracking: Include cost tracking data (for self-hosted)
+            cost_tracking_verbosity: Level of detail: "summary", "detailed", or "full"
         Returns:
             Extract response with job ID for status polling
         """
@@ -354,6 +359,7 @@ class AsyncFirecrawlClient:
             limit=limit,
             show_llm_usage=show_llm_usage,
             show_cost_tracking=show_cost_tracking,
+            cost_tracking_verbosity=cost_tracking_verbosity,
         )
 
     # Agent

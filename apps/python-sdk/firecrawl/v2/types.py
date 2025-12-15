@@ -765,28 +765,51 @@ class ExtractRequest(BaseModel):
 
 
 class CostTrackingCall(BaseModel):
-    """A single LLM call in the cost tracking breakdown."""
+    """A single LLM call in the cost tracking breakdown.
+    
+    Attributes:
+        cost: Cost in USD for this call
+        model: Model identifier (e.g., "gemini-2.0-flash", "gpt-4o-mini")
+        metadata: Additional context about the call (source, method, etc.)
+        tokens: Token counts with 'input' and 'output' keys
+        stack: Stack trace (only present with verbosity="full")
+    """
 
     model_config = {"extra": "allow"}
 
-    type: Optional[str] = None
     cost: Optional[float] = None
     model: Optional[str] = None
     metadata: Optional[Dict[str, Any]] = None
     tokens: Optional[Dict[str, int]] = None
+    stack: Optional[str] = None  # Only present with verbosity="full"
 
 
 class CostTrackingData(BaseModel):
-    """Detailed cost tracking breakdown for extract operations."""
+    """Cost tracking data for extract operations.
+    
+    The fields present depend on the verbosity level:
+    - "summary": Only aggregate fields (total_calls, total_input_tokens, total_output_tokens, total_cost)
+    - "detailed": Aggregates + calls array (without stack traces)
+    - "full": Everything including stack traces in calls
+    
+    Attributes:
+        total_calls: Total number of LLM calls made
+        total_input_tokens: Sum of all input tokens across all calls
+        total_output_tokens: Sum of all output tokens across all calls
+        total_cost: Total cost in USD across all calls
+        calls: List of individual LLM calls (not present in "summary" verbosity)
+    """
 
     model_config = {"extra": "allow"}
 
-    calls: Optional[List[CostTrackingCall]] = None
-    smart_scrape_call_count: Optional[int] = None
-    smart_scrape_cost: Optional[float] = None
-    other_call_count: Optional[int] = None
-    other_cost: Optional[float] = None
+    # Summary fields (always present)
+    total_calls: Optional[int] = None
+    total_input_tokens: Optional[int] = None
+    total_output_tokens: Optional[int] = None
     total_cost: Optional[float] = None
+    
+    # Detailed fields (present with "detailed" or "full" verbosity)
+    calls: Optional[List[CostTrackingCall]] = None
 
 
 class ExtractResponse(BaseModel):
