@@ -955,11 +955,6 @@ export async function performExtraction_F0(
           otherCost: totalCost,
           totalCost: totalCost,
         } as any,
-      }).catch(error => {
-        logger.error("Failed to update extract status to completed", {
-          extractId,
-          error,
-        });
       });
     })
     .catch(error => {
