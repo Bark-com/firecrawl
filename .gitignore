@@ -53,3 +53,6 @@ apps/python-sdk/.venv/
 
 /apps/go-html-to-md-service/.gomodcache/
 target/
+
+# Custom
+temporary_docs
